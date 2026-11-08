@@ -1,0 +1,24 @@
+Historique des tarifs réglementés de vente d'électricité Bleu résidentiels (HT et TTC) en France métropolitaine continentale pour les options BASE et Heures pleines Heures creuses, de puissance souscrite inférieure ou égale à 36 kVA.
+Dans les zones non-interconnectées, les TRVE Hors Taxes sont les mêmes qu'en métropole.
+
+Les taxes sont la CTA, la CSPE, la TCFE et la TVA.
+
+## TRV électricité inf36 BASE_2012-2021.csv :
+* DATE_DEBUT : date de début de validité du tarif.
+* DATE_FIN : date de fin de validité du tarif
+* P_SOUSCRITE : puissance souscrite du point de livraison.
+* PART_FIXE_HT : prix de l'abonnement annuel, en euros hors taxes.
+* PART_FIXE_TTC : prix de l'abonnement annuel, en euros toutes taxes comprises.
+* PART_VARIABLE_HT : prix du kWh consommé, en euros hors taxes.
+* PART_VARIABLE_TTC : prix du kWh consommé, en euros toutes taxes comprises.
+
+## TRV électricité inf36 HPHC_2012-2021.csv :
+* DATE_DEBUT : date de début de validité du tarif.
+* DATE_FIN : date de fin de validité du tarif
+* P_SOUSCRITE : puissance souscrite du point de livraison.
+* PART_FIXE_HT : prix de l'abonnement annuel, en euros hors taxes.
+* PART_FIXE_TTC : prix de l'abonnement annuel, en euros toutes taxes comprises.
+* PART_VARIABLE_HC_HT : prix du kWh consommé en heures creuses, en euros hors taxes.
+* PART_VARIABLE_HC_TTC : prix du kWh consommé en heures creuses, en euros toutes taxes comprises.
+* PART_VARIABLE_HP_HT : prix du kWh consommé en heures pleines, en euros hors taxes.
+* PART_VARIABLE_HP_TTC : prix du kWh consommé en heures pleines, en euros toutes taxes comprises.

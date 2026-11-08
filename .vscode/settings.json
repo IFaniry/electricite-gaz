@@ -1,0 +1,12 @@
+{
+  "files.exclude": {
+    "brainstorm-data-too-big": true
+  },
+  "search.exclude": {
+    "brainstorm-data-too-big": true
+  },
+  "files.watcherExclude": {
+    "**/brainstorm-data-too-big/**": true
+  },
+  "python.analysis.typeCheckingMode": "standard"
+}

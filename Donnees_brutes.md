@@ -2,14 +2,28 @@
 
 ## [Electricité et gaz](https://www.data.gouv.fr/pages/donnees-energie)
 
-- REG_conso_2011_ajd.csv : [Consommation annuelle d’électricité et gaz par région](https://www.data.gouv.fr/datasets/consommation-annuelle-delectricite-et-gaz-par-region)
-- DEP_conso_2011_ajd.csv : [Consommation annuelle d’électricité et gaz par département](https://www.data.gouv.fr/datasets/consommation-annuelle-delectricite-et-gaz-par-departement)
-- EPCI_conso_2011_ajd.csv : [Consommation annuelle d’électricité et gaz par EPCI](https://www.data.gouv.fr/datasets/consommation-annuelle-delectricite-et-gaz-par-epci)
-- COM_conso_2011_ajd.csv : [Consommation annuelle d’électricité et gaz par commune](https://www.data.gouv.fr/datasets/consommation-annuelle-delectricite-et-gaz-par-commune)
+- brainstorm-data/REG_conso_2011_ajd.csv :
+
+```
+python fetch_reg_conso.py --start-year 2020
+```
 
 ## [Electricité](https://www.data.gouv.fr/pages/donnees-energie)
 
-- consommation-annuelle-entreprise-par-adresse.csv : [Consommation d'électricité annuelle résidentielle par adresse (jusqu'à 2025)](https://www.data.gouv.fr/datasets/consommation-delectricite-annuelle-residentielle-par-adresse-jusqua-2025)
-- elecdom-donnees-de-consommation-annuelle.csv : [Consommation annuelle d'électricité du secteur résidentiel](https://www.data.gouv.fr/datasets/elecdom-donnees-de-consommation-annuelle)
-- eco2mix-national-tr.csv : [Données issues de l'application éCO2mix, avec notamment la consommation d'électricité en temps réel à la maille nationale](https://www.data.gouv.fr/datasets/donnees-eco2mix-nationales-temps-reel-1)
-- eco2mix-regional-tr.csv : [Données issues de l'application éCO2mix, avec notamment la consommation d'électricité en temps réel à la maille régionale](https://www.data.gouv.fr/datasets/donnees-eco2mix-regionales-temps-reel-1)
+- brainstorm-data/eco2mix-regional-tr.csv :
+
+```
+curl -L "https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets/eco2mix-regional-cons-def/exports/csv?select=code_insee_region%2C%20libelle_region%2C%20date%2C%20avg(consommation)%20as%20puissance_moyenne_mw%2C%20sum(consommation)%2F2%20as%20conso_totale_mwh%2C%20max(consommation)%20as%20pic_journalier_mw&where=date_heure%20%3E%3D%20date%272020-01-01%27%20AND%20consommation%20IS%20NOT%20NULL&group_by=code_insee_region%2C%20libelle_region%2C%20date&delimiter=%3B" -o brainstorm-data/eco2mix-regional-tr.csv
+```
+
+# Agrégats segmentés de consommation électrique au pas 1/2 h des points de soutirage <= 36kVA – Maille régionale
+
+- brainstorm-data/conso-inf36-region-agg.csv :
+
+```
+python fetch_enedis_conso_inf36.py --granularity year
+```
+
+# Prix de l'énergie (data.gouv.fr)
+
+- brainstorm-data\tarifs-elec : [Historique des tarifs réglementés de vente d'électricité pour les consommateurs résidentiels](https://www.data.gouv.fr/datasets/historique-des-tarifs-reglementes-de-vente-delectricite-pour-les-consommateurs-residentiels)
