@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "polars": {
+      "source": "polars-inc/skills",
+      "sourceType": "github",
+      "skillPath": "skills/polars/SKILL.md",
+      "computedHash": "9330ff4cdfa6efe936142b3606bbfce2aed89d726b7248ad5fb07bdc41af76d7"
+    }
+  }
+}
