@@ -1,6 +1,6 @@
 # Architecture du Data Warehouse — Électricité & Gaz (Modèle en Constellation)
 
-Ce document décrit le modèle en étoile / constellation de faits conçu pour analyser et visualiser les **facteurs d'influence ("influencers") de la consommation d'énergie** (électricité principalement, et gaz naturel) à la maille régionale depuis 2020.
+Ce document décrit le modèle en étoile / constellation de faits conçu pour analyser et visualiser les **facteurs d'influence ("influencers") de la consommation d'énergie** (électricité et gaz naturel) à la maille régionale depuis 2020.
 
 ---
 
@@ -12,14 +12,12 @@ erDiagram
     dim_territoire ||--o{ fait_conso_annuelle : "mesurée dans"
     dim_territoire ||--o{ fait_conso_segmentee_inf36 : "mesurée dans"
     dim_territoire ||--o{ fait_conso_journaliere_elec : "mesurée dans"
+    dim_territoire ||--o{ fait_conso_journaliere_gaz : "mesurée dans"
 
     dim_calendrier ||--o{ fait_conso_annuelle : "année"
     dim_calendrier ||--o{ fait_conso_segmentee_inf36 : "mois / année"
     dim_calendrier ||--o{ fait_conso_journaliere_elec : "date_jour"
-
-    dim_energie ||--o{ fait_conso_annuelle : "commute"
-    dim_energie ||--o{ fait_conso_segmentee_inf36 : "Electricité"
-    dim_energie ||--o{ fait_conso_journaliere_elec : "Electricité"
+    dim_calendrier ||--o{ fait_conso_journaliere_gaz : "date_jour"
 
     dim_tarif_reglemente ||--o{ fait_conso_segmentee_inf36 : "croise (option, kVA)"
     dim_contexte_territoire_annuel ||--o{ fait_conso_annuelle : "influence (code_geo, annee)"
@@ -30,20 +28,18 @@ erDiagram
         string zone_vacances "Zone A / Zone B / Zone C / Corse"
     }
 
-    dim_energie {
-        string id_energie PK "ELEC / GAZ"
-        string code_filiere "Electricité / Gaz (jointure REG_conso)"
-        string libelle_energie "Électricité / Gaz naturel"
-        string unite_mesure "MWh"
-    }
-
     fait_conso_journaliere_elec {
-        date date_jour FK "Clé vers dim_calendrier (YYYY-MM-DD)"
-        string code_geo FK "Clé vers dim_territoire (code_insee_region)"
-        string id_energie FK "Toujours ELEC"
-        float conso_totale_mwh "Énergie totale du jour (MWh)"
+        date date_jour PK, FK "Clé vers dim_calendrier (YYYY-MM-DD)"
+        string code_geo PK, FK "Clé vers dim_territoire (code_insee_region)"
+        float conso_totale_mwh "Énergie électrique totale du jour (MWh)"
         float puissance_moyenne_mw "Puissance moyenne journalière (MW)"
         float pic_journalier_mw "Pointe de consommation du jour (MW)"
+    }
+
+    fait_conso_journaliere_gaz {
+        date date_jour PK, FK "Clé vers dim_calendrier (YYYY-MM-DD)"
+        string code_geo PK, FK "Clé vers dim_territoire (code_region)"
+        float conso_totale_mwh "Énergie gaz totale du jour (MWh PCS 0°C)"
     }
 
     dim_contexte_territoire_annuel {
@@ -79,7 +75,7 @@ erDiagram
         int jour_semaine "1..7 (Lundi..Dimanche)"
         boolean est_weekend "True si Samedi/Dimanche"
         string saison "Hiver / Printemps / Été / Automne"
-        boolean est_jour_ferie "Via bibliothèque Python holidays"
+        boolean est_jour_ferie "Via bibliothèque Python jours-feries-france"
         string nom_jour_ferie "Nom du jour férié"
         boolean vacances_zone_a "Extrait de Zone-A-B-C-Corse.ics"
         boolean vacances_zone_b "Extrait de Zone-A-B-C-Corse.ics"
@@ -106,24 +102,23 @@ erDiagram
     }
 
     fait_conso_segmentee_inf36 {
-        string periode FK "YYYY-MM (ou YYYY)"
-        string code_geo FK "Code INSEE Région"
-        string id_energie FK "Toujours ELEC"
-        string categorie_client "RES / PRO"
-        string option_tarifaire "BASE / HPHC"
-        string profil_enedis "RES1, RES11, RES2, PRO1..."
-        int p_souscrite_kva "Puissance souscrite (kVA)"
+        string periode PK, FK "YYYY-MM (ou YYYY)"
+        string code_geo PK, FK "Code INSEE Région"
+        string categorie_client PK "RES / PRO"
+        string option_tarifaire PK "BASE / HPHC"
+        string profil_enedis PK "RES1, RES11, RES2, PRO1..."
+        int p_souscrite_kva PK "Puissance souscrite (kVA)"
         float conso_totale_mwh "Volume total soutiré (MWh)"
         int nb_points_soutirage_moyen "Nombre moyen de compteurs (PDL)"
         float conso_moyenne_par_site_mwh "Conso par compteur (MWh/site)"
     }
 
     fait_conso_annuelle {
-        int annee FK "YYYY"
-        string code_geo FK "Code INSEE Région"
-        string id_energie FK "ELEC / GAZ"
-        string categorie_consommation "RES / ENT_PRO / ENT"
-        string grand_secteur "RESIDENTIEL / TERTIAIRE / INDUSTRIE / AGRICULTURE"
+        int annee PK, FK "YYYY"
+        string code_geo PK, FK "Code INSEE Région"
+        string filiere PK "Electricité / Gaz"
+        string categorie_consommation PK "RES / ENT_PRO / ENT"
+        string grand_secteur PK "RESIDENTIEL / TERTIAIRE / INDUSTRIE / AGRICULTURE"
         float conso_totale_mwh "Consommation totale (MWh)"
         float conso_moyenne_mwh "Consommation moyenne par site (MWh)"
         int nb_sites "Nombre de points de livraison"
@@ -143,10 +138,10 @@ erDiagram
 | **`fait_conso_annuelle`** | Fait | `brainstorm-data/REG_conso_ajd.csv` (mis à jour via `fetch_reg_conso.py`) |
 | **`fait_conso_segmentee_inf36`** | Fait | `brainstorm-data/conso-inf36-region-agg.csv` (agrégé via `fetch_enedis_conso_inf36.py`) |
 | **`fait_conso_journaliere_elec`** | Fait | `brainstorm-data/eco2mix-regional-tr.csv` (exporté depuis l'API ODRÉ Opendatasoft) |
+| **`fait_conso_journaliere_gaz`** | Fait | `brainstorm-data/conso-gaz-regional-quotidien.csv` (exporté depuis l'API ODRÉ Opendatasoft) |
 | **`dim_contexte_territoire_annuel`** | Dimension | Colonnes climatiques (`DJU à TR`, `DJU à TN`) et logements de `brainstorm-data/REG_conso_ajd.csv` dédoublonnées par `(code_geo, annee)` |
-| **`dim_territoire`** | Dimension | Codes INSEE et noms des 13 régions métropolitaines + correspondance zones académiques (`Zone A`, `Zone B`, `Zone C`, `Corse`) |
-| **`dim_energie`** | Dimension | Table de référence (`ELEC` = Électricité, `GAZ` = Gaz naturel) |
-| **`dim_calendrier`** | Dimension | Calendrier généré en Python enrichi avec `brainstorm-data/vacances-scolaires/Zone-A-B-C-Corse.ics` et la librairie Python `holidays` |
+| **`dim_territoire`** | Dimension | Codes INSEE et noms des 13 régions métropolitaines (+ 5 DROM) + correspondance zones académiques (`Zone A`, `Zone B`, `Zone C`, `Corse`) |
+| **`dim_calendrier`** | Dimension | Calendrier généré en Python enrichi avec `brainstorm-data/vacances-scolaires/Zone-A-B-C-Corse.ics` et la librairie Python `jours-feries-france` |
 | **`dim_tarif_reglemente`** | Dimension | `brainstorm-data/tarifs-elec/Option_Base.csv`, `Option_HPHC.csv` et `Option_Tempo.csv` |
 
 ---
@@ -188,20 +183,20 @@ erDiagram
 
 ---
 
-### 📅 D. Rythmes Calendaires : Vacances Scolaires, Jours Fériés & Saisonnalité (`fait_conso_journaliere_elec` $\times$ `dim_calendrier` $\times$ `dim_territoire`)
+### 📅 D. Rythmes Calendaires : Vacances Scolaires, Jours Fériés & Saisonnalité (`fait_conso_journaliere_elec` & `fait_conso_journaliere_gaz` $\times$ `dim_calendrier` $\times$ `dim_territoire`)
 
-10. **Quel est l'impact des vacances scolaires (par Zone A, B, C, Corse) sur la consommation électrique quotidienne et la pointe journalière (`pic_journalier_mw`) ?**
-    * Lorsqu'une région entre dans sa propre période de vacances d'hiver ou de Noël (via la jointure `dim_territoire.zone_vacances` $\leftrightarrow$ `dim_calendrier.vacances_zone_*`), de combien de % chute la consommation ou le pic journalier (fermeture des écoles et baisse d'activité tertiaire) ?
-11. **Quel est le "décrochage" de consommation lors des jours fériés officiels et des week-ends ?**
+10. **Quel est l'impact des vacances scolaires (par Zone A, B, C, Corse) sur les consommations électriques et gazières quotidiennes et la pointe électrique (`pic_journalier_mw`) ?**
+    * Lorsqu'une région entre dans sa propre période de vacances d'hiver ou de Noël (via la jointure `dim_territoire.zone_vacances` $\leftrightarrow$ `dim_calendrier.vacances_zone_*`), de combien de % chutent la consommation d'électricité, la consommation de gaz et le pic journalier ?
+11. **Quel est le "décrochage" de consommation électrique et gazière lors des jours fériés officiels et des week-ends ?**
     * Quelle est la baisse moyenne de consommation un jour férié tombant en semaine par rapport à un jour ouvré normal de la même saison et de la même région ?
-12. **Comment se déforme la courbe saisonnière entre l'hiver et l'été selon les régions ?**
-    * Quelles régions connaissent un pic estival lié à la climatisation et au tourisme (ex. Provence-Alpes-Côte d'Azur, Occitanie, Corse) comparé au creux estival des régions continentales ?
+12. **Comment se déforme la courbe saisonnière quotidienne entre l'hiver et l'été pour l'Électricité vs le Gaz naturel ?**
+    * Le gaz naturel chute-t-il beaucoup plus fortement en été (usage quasi-exclusivement thermique/chauffage hors industrie) que l'électricité (talon de consommation estival, climatisation, tourisme) ?
 
 ---
 
-### ⚡🔥 E. Comparaison Multi-Énergies & Sectorielle (`fait_conso_annuelle` $\times$ `dim_energie`)
+### ⚡🔥 E. Comparaison Multi-Énergies & Sectorielle (`fait_conso_annuelle`, `fait_conso_journaliere_elec`, `fait_conso_journaliere_gaz`)
 
 13. **Comment se répartit le mix de consommation finale entre Électricité et Gaz naturel par grand secteur (`RESIDENTIEL`, `TERTIAIRE`, `INDUSTRIE`, `AGRICULTURE`) ?**
     * Quel secteur pèse le plus dans la consommation de gaz vs d'électricité au sein de chaque région ?
-14. **Observe-t-on une électrification des usages au détriment du gaz naturel depuis 2020 ?**
-    * La baisse de consommation du gaz résidentiel/tertiaire entre 2020 et 2025 s'accompagne-t-elle d'une hausse du `taux_chauffage_electrique` et du nombre de sites électriques (pompes à chaleur, rénovations) ?
+14. **Observe-t-on une électrification des usages au détriment du gaz naturel depuis 2020 (à la fois à l'échelle annuelle et sur les courbes quotidiennes) ?**
+    * La baisse de consommation du gaz entre 2020 et 2025 s'accompagne-t-elle d'une hausse du `taux_chauffage_electrique` et du nombre de sites électriques (pompes à chaleur, rénovations) ?

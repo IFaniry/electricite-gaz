@@ -1,0 +1,193 @@
+// Database Markup Language (DBML) Schema
+// Data Warehouse Électricité & Gaz (Constellation Schema)
+// Generated from Datawarehouse.md
+
+Project electricite_gaz_dw {
+  database_type: 'MySQL'
+  Note: '''
+    # Data Warehouse Électricité & Gaz
+    Modèle en constellation de faits pour l'analyse des facteurs d'influence
+    de la consommation énergétique régionale (climat/DJU, parc de logements, tarifs réglementés, calendrier).
+  '''
+}
+
+// ----------------------------------------------------------------------------
+// 1. Dimensions
+// ----------------------------------------------------------------------------
+
+Table dim_territoire {
+  code_geo varchar(10) [pk, note: 'Code officiel INSEE Région (ex: 11, 24, 84...)']
+  nom_region varchar(100) [not null, note: 'Libellé officiel de la région (ex: Île-de-France...)']
+  zone_vacances varchar(50) [not null, note: 'Zone académique scolaire (Zone A / Zone B / Zone C / Corse / Outre-mer)']
+
+  Note: 'Référentiel géographique des 13 régions métropolitaines et 5 régions d\'outre-mer'
+}
+
+Table dim_calendrier {
+  date_jour date [pk, note: 'Date calendaire (YYYY-MM-DD)']
+  annee int [not null, note: 'Année (ex: 2020..2026)']
+  periode_mois varchar(7) [not null, note: 'Année-mois (YYYY-MM)']
+  mois int [not null, note: 'Mois (1..12)']
+  jour_semaine int [not null, note: 'Jour de la semaine (1=Lundi..7=Dimanche)']
+  est_weekend boolean [not null, note: 'Vrai si Samedi ou Dimanche']
+  saison varchar(20) [not null, note: 'Hiver / Printemps / Été / Automne']
+  est_jour_ferie boolean [not null, note: 'Vrai si jour férié légal en France (via jours-feries-france)']
+  nom_jour_ferie varchar(100) [null, note: 'Libellé du jour férié (ex: Jour de l\'An, Fête du Travail...)']
+  vacances_zone_a boolean [not null, note: 'Vrai si période de vacances scolaires Zone A']
+  vacances_zone_b boolean [not null, note: 'Vrai si période de vacances scolaires Zone B']
+  vacances_zone_c boolean [not null, note: 'Vrai si période de vacances scolaires Zone C']
+  vacances_corse boolean [not null, note: 'Vrai si période de vacances scolaires Corse']
+
+  indexes {
+    annee [name: 'idx_cal_annee']
+    periode_mois [name: 'idx_cal_periode_mois']
+  }
+
+  Note: 'Dimension temporelle enrichie avec jours fériés et vacances scolaires académiques'
+}
+
+Table dim_tarif_reglemente {
+  id_tarif varchar(60) [pk, note: 'Clé technique composite (Option_Puissance_DateDebut)']
+  option_tarifaire varchar(20) [not null, note: 'Option tarifaire (BASE / HPHC / TEMPO)']
+  p_souscrite_kva int [not null, note: 'Puissance souscrite en kVA (3, 6, 9, 12, 15, 18, 24, 30, 36)']
+  date_debut date [not null, note: 'Date d\'application du barème TRV']
+  date_fin date [null, note: 'Date de fin de validité du barème (null si en cours)']
+  part_fixe_ttc double [not null, note: 'Abonnement annuel TTC (€/an)']
+  part_variable_ttc_base double [null, note: 'Prix du kWh Base TTC (€/kWh)']
+  part_variable_ttc_hp double [null, note: 'Prix du kWh Heures Pleines TTC (€/kWh)']
+  part_variable_ttc_hc double [null, note: 'Prix du kWh Heures Creuses TTC (€/kWh)']
+  part_variable_bleu_hp double [null, note: 'Prix kWh Tempo Jour Bleu HP TTC (€/kWh)']
+  part_variable_bleu_hc double [null, note: 'Prix kWh Tempo Jour Bleu HC TTC (€/kWh)']
+  part_variable_blanc_hp double [null, note: 'Prix kWh Tempo Jour Blanc HP TTC (€/kWh)']
+  part_variable_blanc_hc double [null, note: 'Prix kWh Tempo Jour Blanc HC TTC (€/kWh)']
+  part_variable_rouge_hp double [null, note: 'Prix kWh Tempo Jour Rouge HP TTC (€/kWh)']
+  part_variable_rouge_hc double [null, note: 'Prix kWh Tempo Jour Rouge HC TTC (€/kWh)']
+
+  indexes {
+    (option_tarifaire, p_souscrite_kva) [name: 'idx_trv_option_kva']
+  }
+
+  Note: 'Historique des tarifs réglementés de vente d\'électricité (Option Base, HPHC et Tempo)'
+}
+
+Table dim_contexte_territoire_annuel {
+  code_geo varchar(10) [not null, note: 'Code officiel INSEE Région']
+  annee int [not null, note: 'Année (2020..2025)']
+  dju_tr double [null, note: 'Degrés Jours Unifiés à Température Réelle (rigueur de l\'hiver)']
+  dju_tn double [null, note: 'Degrés Jours Unifiés à Température Normale trentenaire']
+  thermosensibilite_moy_kwh_dju double [null, note: 'Thermosensibilité moyenne (kWh consommés par DJU)']
+  taux_chauffage_electrique double [null, note: 'Part des logements chauffés à l\'électricité (0 à 1)']
+  taux_logements_collectifs double [null, note: 'Part des logements en habitat collectif (0 à 1)']
+  taux_residences_principales double [null, note: 'Part des résidences principales (0 à 1)']
+  nombre_d_habitants bigint [null, note: 'Population régionale']
+  superficie_moins_30m2 double [null, note: 'Nombre de logements de moins de 30 m²']
+  superficie_30_40m2 double [null, note: 'Nombre de logements de 30 à 40 m²']
+  superficie_40_60m2 double [null, note: 'Nombre de logements de 40 à 60 m²']
+  superficie_60_80m2 double [null, note: 'Nombre de logements de 60 à 80 m²']
+  superficie_80_100m2 double [null, note: 'Nombre de logements de 80 à 100 m²']
+  superficie_plus_100m2 double [null, note: 'Nombre de logements de plus de 100 m²']
+  residences_avant_1919 double [null, note: 'Nombre de résidences principales construites avant 1919']
+  residences_1919_1945 double [null, note: 'Nombre de résidences principales de 1919 à 1945']
+  residences_1946_1970 double [null, note: 'Nombre de résidences principales de 1946 à 1970 (pré-RT 1974)']
+  residences_1971_1990 double [null, note: 'Nombre de résidences principales de 1971 à 1990']
+  residences_1991_2005 double [null, note: 'Nombre de résidences principales de 1991 à 2005']
+  residences_2006_2018 double [null, note: 'Nombre de résidences principales de 2006 à 2018']
+  residences_apres_2019 double [null, note: 'Nombre de résidences principales construites après 2019']
+
+  indexes {
+    (code_geo, annee) [pk]
+  }
+
+  Note: 'Facteurs d\'influence régionaux annuels : climat/DJU, équipement thermique et parc de résidences'
+}
+
+// ----------------------------------------------------------------------------
+// 2. Fact Tables
+// ----------------------------------------------------------------------------
+
+Table fait_conso_journaliere_elec {
+  date_jour date [not null, note: 'Date d\'observation (YYYY-MM-DD)']
+  code_geo varchar(10) [not null, note: 'Code région INSEE']
+  conso_totale_mwh double [null, note: 'Énergie électrique totale consommée sur la journée (MWh)']
+  puissance_moyenne_mw double [null, note: 'Puissance moyenne appelée au cours du jour (MW)']
+  pic_journalier_mw double [null, note: 'Pointe maximale de puissance atteinte dans la journée (MW)']
+
+  indexes {
+    (date_jour, code_geo) [pk]
+  }
+
+  Note: 'Consommation électrique quotidienne haute fréquence par région (source: Eco2mix RTE)'
+}
+
+Table fait_conso_journaliere_gaz {
+  date_jour date [not null, note: 'Date d\'observation (YYYY-MM-DD)']
+  code_geo varchar(10) [not null, note: 'Code région INSEE']
+  conso_totale_mwh double [null, note: 'Énergie gaz totale consommée sur la journée (MWh PCS 0°C)']
+
+  indexes {
+    (date_jour, code_geo) [pk]
+  }
+
+  Note: 'Consommation gazière quotidienne par région consolidée NaTran + Teréga (source: ODRÉ)'
+}
+
+Table fait_conso_segmentee_inf36 {
+  periode varchar(10) [not null, note: 'Période mensuelle YYYY-MM (ou annuelle YYYY)']
+  code_geo varchar(10) [not null, note: 'Code région INSEE']
+  categorie_client varchar(20) [not null, note: 'Segment client (RES = Résidentiel, PRO = Professionnel)']
+  option_tarifaire varchar(20) [not null, note: 'Option tarifaire déduite du profil (BASE vs HPHC)']
+  profil_enedis varchar(50) [not null, note: 'Profil dynamique Enedis (ex: RES1, RES11, RES2, PRO1...)']
+  p_souscrite_kva int [not null, note: 'Puissance souscrite normalisée en kVA (3, 6, 9, 12, 15, 18...)']
+  conso_totale_mwh double [null, note: 'Volume total soutiré sur la période (MWh)']
+  nb_points_soutirage_moyen bigint [null, note: 'Nombre moyen de points de livraison / compteurs actifs']
+  conso_moyenne_par_site_mwh double [null, note: 'Consommation moyenne par compteur (MWh/site)']
+
+  indexes {
+    (periode, code_geo, categorie_client, option_tarifaire, profil_enedis, p_souscrite_kva) [pk]
+    (option_tarifaire, p_souscrite_kva) [name: 'idx_seg_option_kva']
+  }
+
+  Note: 'Consommation électrique segmentée <= 36 kVA pour comparer l\'option BASE vs HPHC'
+}
+
+Table fait_conso_annuelle {
+  annee int [not null, note: 'Année d\'observation (YYYY)']
+  code_geo varchar(10) [not null, note: 'Code région INSEE']
+  filiere varchar(30) [not null, note: 'Filière énergétique (Electricité / Gaz)']
+  categorie_consommation varchar(30) [not null, note: 'Catégorie de consommation (RES, ENT_PRO, ENT...)']
+  grand_secteur varchar(30) [not null, note: 'Secteur d\'activité (RESIDENTIEL, TERTIAIRE, INDUSTRIE, AGRICULTURE)']
+  conso_totale_mwh double [null, note: 'Consommation brute observée (MWh)']
+  conso_moyenne_mwh double [null, note: 'Consommation moyenne par site (MWh)']
+  nb_sites bigint [null, note: 'Nombre total de points de livraison']
+  part_thermosensible double [null, note: 'Part thermosensible de la consommation (0 à 1)']
+  conso_usages_thermosensibles_mwh double [null, note: 'Volume de consommation sensible aux variations climatiques (MWh)']
+  conso_usages_non_thermosensibles_mwh double [null, note: 'Volume de consommation de base non thermosensible (MWh)']
+  conso_corrigee_alea_climatique_mwh double [null, note: 'Consommation ramenée à rigueur climatique trentenaire normale (MWh)']
+
+  indexes {
+    (annee, code_geo, filiere, categorie_consommation, grand_secteur) [pk]
+  }
+
+  Note: 'Bilan annuel multi-énergies (Électricité & Gaz) par grand secteur et région'
+}
+
+// ----------------------------------------------------------------------------
+// 3. Relationships & Foreign Keys
+// ----------------------------------------------------------------------------
+
+// Relations Territoire
+Ref: dim_contexte_territoire_annuel.code_geo > dim_territoire.code_geo
+Ref: fait_conso_journaliere_elec.code_geo > dim_territoire.code_geo
+Ref: fait_conso_journaliere_gaz.code_geo > dim_territoire.code_geo
+Ref: fait_conso_segmentee_inf36.code_geo > dim_territoire.code_geo
+Ref: fait_conso_annuelle.code_geo > dim_territoire.code_geo
+
+// Relations Calendrier
+Ref: fait_conso_journaliere_elec.date_jour > dim_calendrier.date_jour
+Ref: fait_conso_journaliere_gaz.date_jour > dim_calendrier.date_jour
+
+// Relations Tarifs Réglementés (TRV) vers Consommation Segmentée
+Ref: fait_conso_segmentee_inf36.option_tarifaire > dim_tarif_reglemente.option_tarifaire
+
+// Relation Contexte Annuel Régional vers Consommation Annuelle
+Ref: fait_conso_annuelle.(code_geo, annee) > dim_contexte_territoire_annuel.(code_geo, annee)

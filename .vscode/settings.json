@@ -8,5 +8,6 @@
   "files.watcherExclude": {
     "**/brainstorm-data-too-big/**": true
   },
-  "python.analysis.typeCheckingMode": "standard"
+  "python.analysis.typeCheckingMode": "standard",
+  "python.terminal.useEnvFile": true
 }

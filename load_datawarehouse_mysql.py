@@ -2,18 +2,18 @@
 """
 ETL Pipeline (Polars Lazy API -> MySQL) for the Energy Consumption Data Warehouse.
 
-Loads the 8 tables of the Constellation Schema defined in `Datawarehouse.md` (lines 9-135)
+Loads the 8 tables of the Constellation Schema defined in `Datawarehouse.md`
 from `brainstorm-data/` into a MySQL database:
 
 Dimensions:
   1. `dim_territoire`
-  2. `dim_energie`
-  3. `dim_calendrier` (enriched with `jours-feries-france` and `Zone-A-B-C-Corse.ics`)
-  4. `dim_tarif_reglemente` (`Option_Base.csv`, `Option_HPHC.csv`, `Option_Tempo.csv`)
-  5. `dim_contexte_territoire_annuel` (climate DJU & housing stock from `REG_conso`)
+  2. `dim_calendrier` (enriched with `jours-feries-france` and `Zone-A-B-C-Corse.ics`)
+  3. `dim_tarif_reglemente` (`Option_Base.csv`, `Option_HPHC.csv`, `Option_Tempo.csv`)
+  4. `dim_contexte_territoire_annuel` (climate DJU & housing stock from `REG_conso`)
 
 Fact Tables:
-  6. `fait_conso_journaliere_elec` (`eco2mix-regional-tr.csv`)
+  5. `fait_conso_journaliere_elec` (`eco2mix-regional-tr.csv`)
+  6. `fait_conso_journaliere_gaz` (`conso-gaz-regional-quotidien.csv`)
   7. `fait_conso_segmentee_inf36` (`conso-inf36-region-agg.csv`)
   8. `fait_conso_annuelle` (`REG_conso_ajd.csv` / `REG_conso_2011_ajd.csv`)
 """
@@ -61,21 +61,6 @@ TERRITOIRES_REFERENCE: list[dict[str, str]] = [
     {"code_geo": "06", "nom_region": "Mayotte", "zone_vacances": "Outre-mer"},
 ]
 
-ENERGIES_REFERENCE: list[dict[str, str]] = [
-    {
-        "id_energie": "ELEC",
-        "code_filiere": "Electricité",
-        "libelle_energie": "Électricité",
-        "unite_mesure": "MWh",
-    },
-    {
-        "id_energie": "GAZ",
-        "code_filiere": "Gaz",
-        "libelle_energie": "Gaz naturel",
-        "unite_mesure": "MWh",
-    },
-]
-
 
 # ============================================================================
 # 1. Lazy Builders for Dimension Tables
@@ -93,21 +78,6 @@ def build_dim_territoire() -> pl.LazyFrame:
             pl.col("zone_vacances").cast(pl.String),
         )
         .sort("code_geo")
-    )
-
-
-def build_dim_energie() -> pl.LazyFrame:
-    """Build `dim_energie` LazyFrame."""
-    return (
-        pl.DataFrame(ENERGIES_REFERENCE)
-        .lazy()
-        .select(
-            pl.col("id_energie").cast(pl.String),
-            pl.col("code_filiere").cast(pl.String),
-            pl.col("libelle_energie").cast(pl.String),
-            pl.col("unite_mesure").cast(pl.String),
-        )
-        .sort("id_energie")
     )
 
 
@@ -240,8 +210,11 @@ def build_dim_calendrier(
         .lazy()
     )
 
-    # Month*100 + Day expression for calendar season boundaries
-    md = pl.col("date_jour").dt.month() * 100 + pl.col("date_jour").dt.day()
+    # Month*100 + Day expression for calendar season boundaries (cast from Int8 to avoid overflow)
+    md = (
+        pl.col("date_jour").dt.month().cast(pl.Int32) * 100
+        + pl.col("date_jour").dt.day().cast(pl.Int32)
+    )
 
     return (
         base_dates.join(holidays_lf, on="date_jour", how="left")
@@ -641,10 +614,44 @@ def build_fait_conso_journaliere_elec(data_dir: Path) -> pl.LazyFrame:
         .select(
             pl.col("date").alias("date_jour"),
             pl.col("code_insee_region").str.strip_chars().str.zfill(2).alias("code_geo"),
-            pl.lit("ELEC").alias("id_energie"),
             pl.col("conso_totale_mwh"),
             pl.col("puissance_moyenne_mw"),
             pl.col("pic_journalier_mw"),
+        )
+        .sort("date_jour", "code_geo")
+    )
+
+
+def build_fait_conso_journaliere_gaz(data_dir: Path) -> pl.LazyFrame:
+    """Build `fait_conso_journaliere_gaz` LazyFrame from `conso-gaz-regional-quotidien.csv`."""
+    valid_codes = [t["code_geo"] for t in TERRITOIRES_REFERENCE]
+    return (
+        pl.scan_csv(
+            data_dir / "conso-gaz-regional-quotidien.csv",
+            separator=";",
+            null_values=["", "N/A", "NULL"],
+            schema_overrides={
+                "code_region": pl.String,
+                "region": pl.String,
+                "date": pl.String,
+                "conso_totale_mwh": pl.Float64,
+            },
+        )
+        .with_columns(
+            pl.col("date").str.slice(0, 10).str.to_date("%Y-%m-%d").alias("date_jour"),
+            pl.col("code_region").str.strip_chars().str.zfill(2).alias("code_geo"),
+        )
+        .filter(
+            (pl.col("date_jour") >= dt.date(2020, 1, 1))
+            & (pl.col("date_jour") <= dt.date(2026, 12, 31))
+            & pl.col("code_geo").is_in(valid_codes)
+        )
+        .group_by("date_jour", "code_geo")
+        .agg(pl.col("conso_totale_mwh").sum().alias("conso_totale_mwh"))
+        .select(
+            "date_jour",
+            "code_geo",
+            "conso_totale_mwh",
         )
         .sort("date_jour", "code_geo")
     )
@@ -686,7 +693,6 @@ def build_fait_conso_segmentee_inf36(data_dir: Path) -> pl.LazyFrame:
         .select(
             pl.col("periode"),
             pl.col("code_region").str.strip_chars().str.zfill(2).alias("code_geo"),
-            pl.lit("ELEC").alias("id_energie"),
             pl.col("categorie_client"),
             pl.col("option_tarifaire"),
             pl.col("profil_enedis"),
@@ -710,7 +716,7 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
     """
     Build `fait_conso_annuelle` LazyFrame from `REG_conso` by aggregating across
     operators (`OPERATEUR`) and NAF2 codes per
-    `(annee, code_geo, id_energie, categorie_consommation, grand_secteur)`.
+    `(annee, code_geo, filiere, categorie_consommation, grand_secteur)`.
     """
     thermo_col = "Conso totale à usages thermosensibles (MWh)"
     non_thermo_col = "Conso totale à usages non thermosensibles (MWh)"
@@ -721,9 +727,9 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
     return (
         reg_conso_lf.with_columns(
             pl.when(pl.col("FILIERE") == "Electricité")
-            .then(pl.lit("ELEC"))
-            .otherwise(pl.lit("GAZ"))
-            .alias("id_energie"),
+            .then(pl.lit("Electricité"))
+            .otherwise(pl.lit("Gaz"))
+            .alias("filiere"),
             pl.col("CODE CATEGORIE CONSOMMATION")
             .fill_null("INCONNU")
             .alias("categorie_consommation"),
@@ -734,7 +740,7 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
         .group_by(
             "annee",
             "code_geo",
-            "id_energie",
+            "filiere",
             "categorie_consommation",
             "grand_secteur",
         )
@@ -773,7 +779,7 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
         .select(
             "annee",
             "code_geo",
-            "id_energie",
+            "filiere",
             "categorie_consommation",
             "grand_secteur",
             "conso_totale_mwh",
@@ -787,7 +793,7 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
         .sort(
             "annee",
             "code_geo",
-            "id_energie",
+            "filiere",
             "categorie_consommation",
             "grand_secteur",
         )
@@ -795,12 +801,13 @@ def build_fait_conso_annuelle(reg_conso_lf: pl.LazyFrame) -> pl.LazyFrame:
 
 
 # ============================================================================
-# 3. MySQL Schema DDL (Constellation Model from Datawarehouse.md lines 9-135)
+# 3. MySQL Schema DDL (Constellation Model from Datawarehouse.md)
 # ============================================================================
 
 DROP_TABLES_ORDER: list[str] = [
     "fait_conso_annuelle",
     "fait_conso_segmentee_inf36",
+    "fait_conso_journaliere_gaz",
     "fait_conso_journaliere_elec",
     "dim_contexte_territoire_annuel",
     "dim_tarif_reglemente",
@@ -816,15 +823,6 @@ CREATE_TABLES_DDL: dict[str, str] = {
             nom_region VARCHAR(100) NOT NULL COMMENT 'Libellé officiel (Île-de-France...)',
             zone_vacances VARCHAR(50) NOT NULL COMMENT 'Zone A / Zone B / Zone C / Corse',
             PRIMARY KEY (code_geo)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    """,
-    "dim_energie": """
-        CREATE TABLE IF NOT EXISTS dim_energie (
-            id_energie VARCHAR(10) NOT NULL COMMENT 'ELEC / GAZ',
-            code_filiere VARCHAR(50) NOT NULL COMMENT 'Electricité / Gaz (jointure REG_conso)',
-            libelle_energie VARCHAR(100) NOT NULL COMMENT 'Électricité / Gaz naturel',
-            unite_mesure VARCHAR(20) NOT NULL COMMENT 'MWh',
-            PRIMARY KEY (id_energie)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """,
     "dim_calendrier": """
@@ -900,21 +898,28 @@ CREATE_TABLES_DDL: dict[str, str] = {
         CREATE TABLE IF NOT EXISTS fait_conso_journaliere_elec (
             date_jour DATE NOT NULL COMMENT 'Clé vers dim_calendrier (YYYY-MM-DD)',
             code_geo VARCHAR(10) NOT NULL COMMENT 'Clé vers dim_territoire (code_insee_region)',
-            id_energie VARCHAR(10) NOT NULL COMMENT 'Toujours ELEC',
-            conso_totale_mwh DOUBLE NULL COMMENT 'Énergie totale du jour (MWh)',
+            conso_totale_mwh DOUBLE NULL COMMENT 'Énergie électrique totale du jour (MWh)',
             puissance_moyenne_mw DOUBLE NULL COMMENT 'Puissance moyenne journalière (MW)',
             pic_journalier_mw DOUBLE NULL COMMENT 'Pointe de consommation du jour (MW)',
-            PRIMARY KEY (date_jour, code_geo, id_energie),
-            CONSTRAINT fk_jour_calendrier FOREIGN KEY (date_jour) REFERENCES dim_calendrier (date_jour),
-            CONSTRAINT fk_jour_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo),
-            CONSTRAINT fk_jour_energie FOREIGN KEY (id_energie) REFERENCES dim_energie (id_energie)
+            PRIMARY KEY (date_jour, code_geo),
+            CONSTRAINT fk_jour_elec_calendrier FOREIGN KEY (date_jour) REFERENCES dim_calendrier (date_jour),
+            CONSTRAINT fk_jour_elec_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """,
+    "fait_conso_journaliere_gaz": """
+        CREATE TABLE IF NOT EXISTS fait_conso_journaliere_gaz (
+            date_jour DATE NOT NULL COMMENT 'Clé vers dim_calendrier (YYYY-MM-DD)',
+            code_geo VARCHAR(10) NOT NULL COMMENT 'Clé vers dim_territoire (code_region)',
+            conso_totale_mwh DOUBLE NULL COMMENT 'Énergie gaz totale du jour (MWh PCS 0°C)',
+            PRIMARY KEY (date_jour, code_geo),
+            CONSTRAINT fk_jour_gaz_calendrier FOREIGN KEY (date_jour) REFERENCES dim_calendrier (date_jour),
+            CONSTRAINT fk_jour_gaz_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """,
     "fait_conso_segmentee_inf36": """
         CREATE TABLE IF NOT EXISTS fait_conso_segmentee_inf36 (
             periode VARCHAR(10) NOT NULL COMMENT 'YYYY-MM (ou YYYY)',
             code_geo VARCHAR(10) NOT NULL COMMENT 'Code INSEE Région',
-            id_energie VARCHAR(10) NOT NULL COMMENT 'Toujours ELEC',
             categorie_client VARCHAR(20) NOT NULL COMMENT 'RES / PRO',
             option_tarifaire VARCHAR(50) NOT NULL COMMENT 'BASE / HPHC',
             profil_enedis VARCHAR(50) NOT NULL COMMENT 'RES1, RES11, RES2, PRO1...',
@@ -922,17 +927,16 @@ CREATE_TABLES_DDL: dict[str, str] = {
             conso_totale_mwh DOUBLE NULL COMMENT 'Volume total soutiré (MWh)',
             nb_points_soutirage_moyen BIGINT NULL COMMENT 'Nombre moyen de compteurs (PDL)',
             conso_moyenne_par_site_mwh DOUBLE NULL COMMENT 'Conso par compteur (MWh/site)',
-            PRIMARY KEY (periode, code_geo, id_energie, categorie_client, option_tarifaire, profil_enedis, p_souscrite_kva),
+            PRIMARY KEY (periode, code_geo, categorie_client, option_tarifaire, profil_enedis, p_souscrite_kva),
             INDEX idx_seg_option_kva (option_tarifaire, p_souscrite_kva),
-            CONSTRAINT fk_seg_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo),
-            CONSTRAINT fk_seg_energie FOREIGN KEY (id_energie) REFERENCES dim_energie (id_energie)
+            CONSTRAINT fk_seg_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """,
     "fait_conso_annuelle": """
         CREATE TABLE IF NOT EXISTS fait_conso_annuelle (
             annee INT NOT NULL COMMENT 'YYYY',
             code_geo VARCHAR(10) NOT NULL COMMENT 'Code INSEE Région',
-            id_energie VARCHAR(10) NOT NULL COMMENT 'ELEC / GAZ',
+            filiere VARCHAR(30) NOT NULL COMMENT 'Electricité / Gaz',
             categorie_consommation VARCHAR(30) NOT NULL COMMENT 'RES / ENT_PRO / ENT',
             grand_secteur VARCHAR(30) NOT NULL COMMENT 'RESIDENTIEL / TERTIAIRE / INDUSTRIE / AGRICULTURE',
             conso_totale_mwh DOUBLE NULL COMMENT 'Consommation totale (MWh)',
@@ -942,9 +946,8 @@ CREATE_TABLES_DDL: dict[str, str] = {
             conso_usages_thermosensibles_mwh DOUBLE NULL COMMENT 'MWh thermosensibles',
             conso_usages_non_thermosensibles_mwh DOUBLE NULL COMMENT 'MWh non thermosensibles',
             conso_corrigee_alea_climatique_mwh DOUBLE NULL COMMENT 'MWh corrigés du climat (à DJU normal)',
-            PRIMARY KEY (annee, code_geo, id_energie, categorie_consommation, grand_secteur),
+            PRIMARY KEY (annee, code_geo, filiere, categorie_consommation, grand_secteur),
             CONSTRAINT fk_ann_territoire FOREIGN KEY (code_geo) REFERENCES dim_territoire (code_geo),
-            CONSTRAINT fk_ann_energie FOREIGN KEY (id_energie) REFERENCES dim_energie (id_energie),
             CONSTRAINT fk_ann_contexte FOREIGN KEY (code_geo, annee) REFERENCES dim_contexte_territoire_annuel (code_geo, annee)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     """,
@@ -959,22 +962,22 @@ def build_all_dataframes(data_dir: Path) -> dict[str, pl.DataFrame]:
 
     table_names = [
         "dim_territoire",
-        "dim_energie",
         "dim_calendrier",
         "dim_tarif_reglemente",
         "dim_contexte_territoire_annuel",
         "fait_conso_journaliere_elec",
+        "fait_conso_journaliere_gaz",
         "fait_conso_segmentee_inf36",
         "fait_conso_annuelle",
     ]
 
     lazy_plans = [
         build_dim_territoire(),
-        build_dim_energie(),
         build_dim_calendrier(data_dir),
         build_dim_tarif_reglemente(data_dir),
         build_dim_contexte_territoire_annuel(reg_conso_lf),
         build_fait_conso_journaliere_elec(data_dir),
+        build_fait_conso_journaliere_gaz(data_dir),
         build_fait_conso_segmentee_inf36(data_dir),
         build_fait_conso_annuelle(reg_conso_lf),
     ]

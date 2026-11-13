@@ -1,0 +1,19 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'sync-tableau/Dockerfile'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/sync-tableau:latest'
+      - '.'
+
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/sync-tableau:latest'
+
+substitutions:
+  _REGION: 'europe-west1'
+  _REPO_NAME: 'energy-dw'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

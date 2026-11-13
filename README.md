@@ -137,3 +137,33 @@ L'option `--mode star-agg` consolide les consommations tous opérateurs confondu
 python fetch_reg_conso.py --start-year 2020 --mode star-agg
 ```
 
+---
+
+# 🗄️ Chargement dans MySQL (`load_datawarehouse_mysql.py`)
+
+Ce script ETL charge les **8 tables du Data Warehouse** (décrites dans [`Datawarehouse.md`](file:///c:/Users/formation/Documents/GitHub/electricite-gaz/Datawarehouse.md)) dans votre base de données MySQL locale avec le moteur haute performance **Polars (Lazy API)**.
+
+## 📋 Installation des dépendances
+
+```bash
+# Création et activation de l'environnement virtuel
+python -m venv .venv
+.venv\Scripts\activate   # Sur Windows
+
+# Installation des paquets requis
+pip install -r requirements.txt
+```
+
+## 🚀 Utilisation
+
+Les identifiants MySQL sont lus automatiquement depuis votre fichier [`.env`](file:///c:/Users/formation/Documents/GitHub/electricite-gaz/.env).
+
+```bash
+# Chargement complet dans MySQL (crée la base electricite_gaz_dw si nécessaire)
+python load_datawarehouse_mysql.py
+
+# Validation préalable des 8 tables sans écriture en base
+python load_datawarehouse_mysql.py --dry-run
+```
+
+

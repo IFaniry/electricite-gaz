@@ -1,0 +1,5 @@
+polars>=2.0.0
+gspread>=6.1.0
+google-auth>=2.29.0
+jours-feries-france>=0.7.0
+python-dotenv>=1.0.0

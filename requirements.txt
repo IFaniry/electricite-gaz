@@ -1,0 +1,19 @@
+# Dependencies for load_datawarehouse_mysql.py (Energy Consumption Data Warehouse ETL)
+
+# High-performance DataFrame engine (Lazy API)
+polars>=1.0.0
+
+# Environment variables management (.env file)
+python-dotenv>=1.0.0
+
+# Official French public holidays calendar
+jours-feries-france>=0.7.0
+
+# SQL toolkit and Object-Relational Mapping (DDL generation and connection pool)
+sqlalchemy>=2.0.0
+
+# Pure-Python MySQL client driver for SQLAlchemy
+pymysql>=1.1.0
+
+# Required by PyMySQL for MySQL 8+ authentication (caching_sha2_password / sha256_password)
+cryptography>=42.0.0

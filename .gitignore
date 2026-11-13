@@ -73,3 +73,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Secrets and Google Cloud Service Account keys
+*credentials*.json
+*.key.json
+service_account.json
